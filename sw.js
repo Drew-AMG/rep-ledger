@@ -1,5 +1,5 @@
 /* Rep Ledger service worker: opens instantly, works offline, and picks up updates when online. */
-const CACHE = 'rep-ledger-v3';
+const CACHE = 'rep-ledger-v4';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
@@ -14,7 +14,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   // The app page: use the network when online so updates arrive, fall back to the saved copy offline.
   if (req.mode === 'navigate'){
-    e.respondWith(fetch(req).then(r => {
+    e.respondWith(fetch(req.url, {cache: 'no-cache'}).then(r => {
       if (r.ok){ const copy = r.clone(); caches.open(CACHE).then(c => c.put('index.html', copy)); }
       return r;
     }).catch(() => caches.match('index.html')));

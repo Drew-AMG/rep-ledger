@@ -235,6 +235,25 @@ h1{background:var(--grad);-webkit-background-clip:text;background-clip:text;colo
 @keyframes flick{0%,100%{transform:scale(1) rotate(-3deg)}50%{transform:scale(1.15) rotate(4deg)}}
 #fx{position:fixed;inset:0;pointer-events:none;z-index:50;width:100%;height:100%}
 </style>
+<style>
+.ringw.sm{width:78px;height:78px}.ringw.sm circle{stroke-width:12}.ringw.sm .mid b{font-size:19px}.ringw.sm .mid span{font-size:10px}
+.rings.goals{gap:6px}
+.mmap{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.mm{appearance:none;border:1px solid var(--line);border-radius:14px;padding:10px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;background:linear-gradient(180deg,color-mix(in srgb,var(--mc) var(--k),var(--surface)),var(--surface));min-width:0;transition:transform .15s}
+.mm .mn{font-size:10.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.mm .mv{font-size:20px}
+.mm.on{outline:3px solid var(--mc);outline-offset:1px;transform:translateY(-2px)}
+.mdet{border-left:4px solid var(--mc);background:var(--surface2);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:3px;margin:0}
+.badges{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.badge{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:10px 4px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;min-width:0}
+.badge .be{font-size:26px;filter:grayscale(1);opacity:.45}
+.badge .bn{font-size:12px;font-weight:600;text-align:center}
+.badge .bp{font-size:11px;color:var(--muted)}
+.badge.got{background:linear-gradient(160deg,rgba(61,90,254,.14),rgba(255,176,32,.2));border-color:var(--sun)}
+.badge.got .be{filter:none;opacity:1}
+.badge.got .bp{color:var(--pr);font-weight:600}
+.badge.on{outline:3px solid var(--accent);outline-offset:1px}
+</style>
 <script>window.__PWA = true;</script>
 
 <div class="app" id="app"></div>
@@ -693,7 +712,7 @@ function viewToday(){
     });
     h += '</div><button class="btn primary block" data-act="start" data-di="' + di + '">Start workout</button></section>';
   }
-  h += quickCard(today);
+  h += goalsCard(today) + quickCard(today);
   const okCount = S.plan.days.filter((d, di) => { const s = weekSession(di); return s && sessOk(s); }).length;
   h += '<section class="card stack"><div class="row between wrap"><h3>This week\'s workouts</h3><span class="muted" style="font-size:13px">' + okCount + ' of ' + S.plan.days.length + ' completed</span></div><div class="list">';
   S.plan.days.forEach((d, di) => {
@@ -799,12 +818,10 @@ function viewProgress(){
       '<div class="row between wrap"><span class="muted" style="font-size:13px">' + (bw ? 'Best set, reps' : 'Estimated one-rep max, ' + unitName()) + '</span><span class="chip pr">Best ' + Math.round(top.y) + (bw ? ' reps' : ' ' + unitName()) + ' · ' + shortD(top.d) + '</span></div></section>';
   }
   h += bodyCard();
-  const sm = setsByMuscle(7);
-  h += '<section class="card stack"><div class="row between wrap"><h3>Sets by muscle</h3><span class="muted" style="font-size:13px">Last 7 days</span></div>';
-  MUSCLES.forEach(m => { h += '<div class="stack" style="gap:4px"><div class="row between"><span>' + m + '</span><span class="num">' + sm[m] + '</span></div><div class="bar"><i style="width:' + Math.min(100, Math.round(100 * sm[m] / 16)) + '%"></i></div></div>'; });
-  h += '<p class="muted" style="font-size:13px">A common target is 10 to 20 hard sets per muscle each week.</p></section>';
+  h += muscleMap();
   const best = {};
   S.sessions.forEach(s => s.x.forEach(q => q[1].forEach(st => { const m = metric(q[0], st[0], st[1]); if (!best[q[0]] || m > best[q[0]].m) best[q[0]] = {m, d: s.d}; })));
+  h += badgesCard();
   h += '<section class="card stack"><h3>Personal records</h3><div class="list">';
   ids.slice(0, 8).forEach(id => { h += '<div class="item"><div class="t">' + esc(nm(id)) + '<div class="s">' + shortD(best[id].d) + '</div></div><div class="num">' + (isBW(id) ? Math.round(best[id].m) + ' reps' : fmtW(best[id].m) + ' ' + unitName()) + '</div></div>'; });
   return h + '</div></section>';
@@ -863,6 +880,7 @@ function viewMe(){
     '<p class="muted" style="font-size:13px">Estimates from the Mifflin-St Jeor equation and your training days. Adjust after two to three weeks based on how your weight moves.</p></section>';
   h += installCard();
   h += exportCard();
+  h += appCard();
   h += ui.impOpen ? importPanel(false) : '<section class="card stack"><h3>Import</h3><button class="btn block" data-act="imp-open">Import a backup</button></section>';
   h += '<section class="card stack"><h3>Erase</h3>' +
     (S.demo ? '<button class="btn block" data-act="cleardemo">Clear sample data and start fresh</button>' : '') +
@@ -1490,6 +1508,85 @@ document.addEventListener('pointerdown', e => {
   const off = () => { b.classList.remove('pressed'); ['pointerup','pointercancel','pointerleave'].forEach(t => b.removeEventListener(t, off)); };
   ['pointerup','pointercancel','pointerleave'].forEach(t => b.addEventListener(t, off));
 });
+/* ---------- Version, goals, muscle map, badges ---------- */
+const APP_VERSION = '4.0';
+function appCard(){
+  return '<section class="card stack"><h3>App</h3><div class="row between"><span class="muted">Version ' + APP_VERSION + '</span>' +
+    (window.__PWA ? '<button class="btn small" data-act="refresh">' + (ui.refreshing ? 'Refreshing…' : 'Get latest version') + '</button>' : '') + '</div>' +
+    (window.__PWA ? '<p class="muted" style="font-size:13px">If a change you expect is missing, tap Get latest version. Your data stays on this device.</p>' : '') + '</section>';
+}
+async function refreshApp(){
+  ui.refreshing = true; render();
+  try {
+    if (navigator.serviceWorker){ const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); }
+    if (window.caches){ const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); }
+  } catch(e){}
+  location.href = location.pathname + '?v=' + Date.now();
+}
+
+function goalsCard(d){
+  const c = calcBody(S.profile), ft = foodTotals(d), mv = qKcal(d), tr = S.sessions.some(s => s.d === d && sessOk(s));
+  const g = [
+    {n:'Workout', v:tr ? 1 : 0, goal:1, big:tr ? '✓' : '–', small:tr ? 'done' : 'to do', col:'var(--accent)', ok:tr},
+    {n:'Protein', v:ft.p, goal:c.protein, big:Math.round(ft.p), small:'of ' + c.protein + 'g', col:'var(--mint)', ok:ft.p >= c.protein * .9},
+    {n:'Move', v:mv, goal:100, big:mv, small:'of 100 kcal', col:'var(--hot)', ok:mv >= 100}];
+  const n = g.filter(x => x.ok).length, all = n === 3;
+  if (all && ui.goalsSeen === d && ui.goalsDone !== d){ ui.goalsDone = d; setTimeout(() => celebrate(false), 250); }
+  if (!all) ui.goalsSeen = d;
+  return '<section class="card stack"><div class="row between"><h3>Today\'s goals</h3><span class="chip ' + (all ? 'good' : 'acc') + '">' + (all ? 'All done 🎉' : n + ' of 3') + '</span></div><div class="rings goals">' +
+    g.map(x => '<div>' + ring(x.v, x.goal, x.col, x.big, x.small).replace('class="ringw"', 'class="ringw sm"') + '<div class="ringcap">' + x.n + (x.ok ? ' ✓' : '') + '</div></div>').join('') + '</div></section>';
+}
+
+function muscleStats(){
+  const t = todayS(), f7 = addD(t, -6), f30 = addD(t, -29), out = {};
+  MUSCLES.forEach(m => out[m] = {s7:0, s30:0, last:null, ex:{}});
+  S.sessions.forEach(s => s.x.forEach(q => { const m = muscleOf(q[0]), o = out[m]; if (!o) return;
+    if (s.d >= f7) o.s7 += q[1].length; if (s.d >= f30){ o.s30 += q[1].length; o.ex[q[0]] = (o.ex[q[0]] || 0) + q[1].length; } if (!o.last || s.d > o.last) o.last = s.d; }));
+  return out;
+}
+function muscleMap(){
+  const st = muscleStats(), sel = ui.mm && st[ui.mm] ? ui.mm : null;
+  let h = '<section class="card stack"><div class="row between wrap"><h3>Muscle map</h3><span class="muted" style="font-size:13px">Sets in the last 7 days. Tap one.</span></div><div class="mmap">';
+  MUSCLES.forEach(m => { const v = st[m].s7, k = Math.min(1, v / 12), c = MCOL[m];
+    h += '<button type="button" class="mm' + (sel === m ? ' on' : '') + '" data-act="mm" data-m="' + m + '" style="--mc:' + c + ';--k:' + Math.round(8 + k * 62) + '%"><span class="mn">' + (m === "Hamstrings" ? "Hams" : m === "Shoulders" ? "Delts" : m) + '</span><span class="mv num">' + v + '</span></button>'; });
+  h += '</div>';
+  if (sel){ const o = st[sel], top = Object.keys(o.ex).sort((a, b) => o.ex[b] - o.ex[a]).slice(0, 3);
+    h += '<div class="mdet" style="--mc:' + MCOL[sel] + '"><div class="row between"><b>' + sel + '</b><span class="muted" style="font-size:13px">' + (o.last ? 'Last trained ' + shortD(o.last) : 'Not trained yet') + '</span></div>' +
+      '<div class="muted" style="font-size:14px">' + o.s7 + ' sets this week · ' + o.s30 + ' in 30 days</div>' +
+      (top.length ? '<div class="muted" style="font-size:13px">Most worked: ' + top.map(id => esc(nm(id)) + ' (' + o.ex[id] + ')').join(', ') + '</div>' : '') +
+      '<div class="muted" style="font-size:13px">' + (o.s7 < 10 ? (10 - o.s7) + ' more hard sets would reach a common weekly target.' : o.s7 > 20 ? 'Plenty of volume this week. Watch your recovery.' : 'In the common 10 to 20 set range.') + '</div></div>'; }
+  return h + '</section>';
+}
+
+function badgeData(){
+  const ok = S.sessions.filter(sessOk), pr = S.sessions.reduce((a, s) => a + (s.pr ? s.pr.length : 0), 0), vol = S.sessions.reduce((a, s) => a + (s.v || 0), 0);
+  const weeks = {}; ok.forEach(s => weeks[monday(s.d)] = 1); let best = 0, run = 0;
+  Object.keys(weeks).sort().forEach((w, i, a) => { run = (i && addD(a[i - 1], 7) === w) ? run + 1 : 1; if (run > best) best = run; });
+  let reps = 0; Object.keys(S.quick).forEach(d => S.quick[d].forEach(e => { if (qUnit(e.k) === 'reps') reps += e.a; }));
+  const fd = Object.keys(S.food).filter(d => S.food[d].length).length, mins = ok.reduce((a, s) => a + Math.round(sessSec(s) / 60), 0);
+  return [
+    ['🏁', 'First rep', 'Complete your first workout', ok.length, 1],
+    ['💪', 'Regular', 'Complete 10 workouts', ok.length, 10],
+    ['🏆', 'Committed', 'Complete 25 workouts', ok.length, 25],
+    ['🔥', 'On fire', 'Train in 4 weeks in a row', best, 4],
+    ['⚡', 'Unstoppable', 'Train in 8 weeks in a row', best, 8],
+    ['⭐', 'Record breaker', 'Set your first personal record', pr, 1],
+    ['🚀', 'PR machine', 'Set 10 personal records', pr, 10],
+    ['🏋️', 'Heavy mover', 'Lift 50 tonnes in total', Math.round(vol / 1000), 50],
+    ['🤸', 'Rep hundred', 'Do 100 quick-exercise reps', reps, 100],
+    ['🥗', 'Fuel logger', 'Log food on 7 different days', fd, 7],
+    ['⏱️', 'Time served', 'Train for 10 hours in total', Math.round(mins / 60), 10],
+    ['⚖️', 'Tracker', 'Log 4 weigh-ins', S.body.length, 4]
+  ].map(b => ({e:b[0], n:b[1], d:b[2], have:Math.min(b[3], b[4]), need:b[4], got:b[3] >= b[4]}));
+}
+function badgesCard(){
+  const bs = badgeData(), n = bs.filter(b => b.got).length, sel = ui.badge;
+  let h = '<section class="card stack"><div class="row between"><h3>Badges</h3><span class="chip acc">' + n + ' of ' + bs.length + '</span></div><div class="badges">';
+  bs.forEach((b, i) => { h += '<button type="button" class="badge' + (b.got ? ' got' : '') + (sel === i ? ' on' : '') + '" data-act="badge" data-i="' + i + '"><span class="be">' + b.e + '</span><span class="bn">' + b.n + '</span><span class="bp">' + (b.got ? 'Earned' : b.have + '/' + b.need) + '</span></button>'; });
+  h += '</div>';
+  if (sel !== undefined && sel !== null && bs[sel]) h += '<p class="mdet" style="--mc:var(--accent)"><b>' + bs[sel].n + '.</b> ' + bs[sel].d + (bs[sel].got ? '. Earned.' : '. ' + bs[sel].have + ' of ' + bs[sel].need + ' so far.') + '</p>';
+  return h + '</section>';
+}
 /* ---------- Render ---------- */
 const TABS = [['today','Today'],['plan','Plan'],['progress','Progress'],['food','Food'],['me','Me']];
 function render(){
@@ -1700,6 +1797,9 @@ document.addEventListener('click', e => {
   else if (a === 'cancelfe'){ ui.editFood = null; keepScroll(); }
   else if (a === 'savefe'){ if (saveFoodEntry()){ ui.editFood = null; save(); keepScroll(); } }
   else if (a === 'install'){ if (deferredInstall){ const ev = deferredInstall; ev.prompt(); Promise.resolve(ev.userChoice).then(() => { deferredInstall = null; render(); }, () => {}); } }
+  else if (a === 'mm'){ ui.mm = ui.mm === D.m ? null : D.m; keepScroll(); }
+  else if (a === 'badge'){ ui.badge = ui.badge === +D.i ? null : +D.i; keepScroll(); }
+  else if (a === 'refresh') refreshApp();
   else if (a === 'exp-copy') copyExport();
   else if (a === 'exp-file') saveExportFile();
   else if (a === 'imp-open'){ ui.impOpen = true; ui.imp = null; ui.impErr = null; render(); }
@@ -1756,7 +1856,11 @@ document.addEventListener('keydown', e => {
 </script>
 <script>
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
-  window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+  window.addEventListener('load', function(){
+    var had = !!navigator.serviceWorker.controller, reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function(){ if (had && !reloaded){ reloaded = true; location.reload(); } });
+    navigator.serviceWorker.register('sw.js', {updateViaCache: 'none'}).then(function(r){ r.update(); }).catch(function(){});
+  });
 }
 </script>
 </body>
