@@ -1,5 +1,5 @@
 /* Rep Ledger service worker: opens instantly, works offline, and picks up updates when online. */
-const CACHE = 'rep-ledger-v1';
+const CACHE = 'rep-ledger-v2';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

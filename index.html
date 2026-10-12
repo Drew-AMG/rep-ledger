@@ -359,7 +359,6 @@ function howBlock(id){
   const tips = CUES[id].split('|');
   return '<div class="how"><ul>' + tips.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul><a href="' + videoUrl(id) + '" target="_blank" rel="noopener">Watch video demos</a></div>';
 }
-
 /* ---------- State and storage ---------- */
 const LSKEY = 'repledger.v1';
 const blank = () => ({v:1, profile:null, plan:null, next:0, sessions:[], body:[], food:{}, quick:{}, foods:null, active:null, demo:false, updated:0});
@@ -523,7 +522,6 @@ function makeDemo(){
   st.next = nxt % st.plan.days.length;
   return st;
 }
-
 /* ---------- Charts ---------- */
 function niceStep(max, n){
   const raw = max / n, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
@@ -577,7 +575,6 @@ const ICON = {
   food:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></svg>',
   check:'<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
 };
-
 
 /* ---------- Today ---------- */
 const WD = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -681,7 +678,6 @@ function viewWorkout(){
   });
   return h;
 }
-
 /* ---------- Plan ---------- */
 function viewPlan(){
   const p = S.profile;
@@ -771,7 +767,8 @@ function viewOnboarding(){
   if (!ui.draft) ui.draft = draftFrom(null);
   return '<header class="stack" style="gap:6px"><div class="eyebrow">Rep Ledger</div><h1>Tell me about you. I will build your routine.</h1><p class="muted">Your goal, experience and equipment set the exercises, sets and reps. Your height, weight and age set your calorie and protein targets.</p></header>' +
     '<section class="card">' + profileForm(ui.draft, false) + '</section>' +
-    '<button class="btn block ghost" data-act="demo">Look around with sample data first</button>';
+    '<button class="btn block ghost" data-act="demo">Look around with sample data first</button>' +
+    (ui.impOpen ? importPanel(true) : '<button class="btn block" data-act="imp-open">I have a backup to import</button>');
 }
 function viewMe(){
   const p = S.profile, c = calcBody(p);
@@ -787,13 +784,14 @@ function viewMe(){
     '<div class="stat"><span class="v">' + c.protein + '<small>g protein</small></span><span class="l">Daily protein target</span></div>' +
     '<p class="muted" style="font-size:13px">Estimates from the Mifflin-St Jeor equation and your training days. Adjust after two to three weeks based on how your weight moves.</p></section>';
   h += installCard();
-  h += '<section class="card stack"><h3>Data</h3>' +
+  h += exportCard();
+  h += ui.impOpen ? importPanel(false) : '<section class="card stack"><h3>Import</h3><button class="btn block" data-act="imp-open">Import a backup</button></section>';
+  h += '<section class="card stack"><h3>Erase</h3>' +
     (S.demo ? '<button class="btn block" data-act="cleardemo">Clear sample data and start fresh</button>' : '') +
     '<button class="btn block" data-act="reset">' + (ui.confirm === 'reset' ? 'Tap again to erase everything' : 'Erase all my data') + '</button>' +
     '<p class="muted" style="font-size:13px">' + (window.claude && window.claude.use ? 'Your workouts are saved to your account when you are signed in, and to this browser either way.' : 'Your workouts are saved on this device. Clearing the browser or app data deletes them.') + '</p></section>';
   return h;
 }
-
 /* ---------- Food ---------- */
 const MEALS = ['Breakfast','Lunch','Dinner','Snack'];
 const r1 = v => Math.round(v * 10) / 10;
@@ -914,7 +912,6 @@ function foodsManager(){
     '<div class="item"><div class="t">' + esc(f.n) + '<div class="s">' + esc(f.s) + ' · ' + esc(macroLine(f)) + '</div></div><button class="btn small ghost" data-act="editfood" data-id="' + f.id + '" aria-label="Edit ' + esc(f.n) + '">Edit</button></div>').join('') + '</div>';
   return h + '<p class="muted" style="font-size:13px">Starter foods are approximate. Edit or delete any of them.</p></section>';
 }
-
 /* ---------- Calories in vs out ---------- */
 function calChart(days, target){
   const W = 360, H = 190, L = 44, R = 8, T = 14, B = 26, n = days.length;
@@ -958,7 +955,6 @@ function calorieSection(){
     '<p class="muted" style="font-size:13px">Burn is an estimate: your resting burn times 1.2 for daily living, plus about ' + MET + ' times your body weight per hour of lifting, plus your quick exercises. Averages skip today and days with no food logged. About 7,700 kcal is roughly 1 kg of body weight.</p></section>';
   return h;
 }
-
 /* ---------- Quick exercises ---------- */
 // key: [name, unit, kcal per unit for a 70 kg person]
 const QX = {
@@ -1189,7 +1185,181 @@ function installCard(){
   return '<section class="card stack"><h3>Install on your phone</h3><p class="muted">Add Rep Ledger to your home screen. It opens full screen like an app and keeps working without internet.</p>' +
     (deferredInstall ? '<button class="btn primary block" data-act="install">Install app</button>' : ios ? '<p>In Safari, tap the Share button, then Add to Home Screen.</p>' : '<p>In Chrome, open the menu and tap Install app or Add to Home screen.</p>') + '</section>';
 }
+/* ---------- Export and import ---------- */
+const EXP_APP = 'rep-ledger';
+function exportText(){
+  const o = JSON.parse(JSON.stringify(S)); o.active = null;
+  return JSON.stringify({app: EXP_APP, v: 1, exported: Date.now(), data: o});
+}
+function selectExport(){
+  const t = document.getElementById('exp-text'); if (!t) return;
+  t.focus(); t.select(); try { t.setSelectionRange(0, t.value.length); } catch(e){}
+}
+async function copyExport(){
+  const txt = exportText(); let ok = false;
+  try { if (navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(txt); ok = true; } } catch(e){}
+  ui.expShow = true;
+  ui.expMsg = ok ? 'Copied. Open the installed app, go to Me, then Import, and paste it there.' : 'Copying was blocked here. The text is selected below, so press and hold it and choose Copy.';
+  keepScroll();
+  if (!ok) selectExport();
+}
+async function saveExportFile(){
+  const txt = exportText(), name = 'rep-ledger-backup-' + todayS() + '.json';
+  try {
+    if (window.claude && claude.use){
+      const dl = await claude.use('downloads');
+      const r = await dl.save({filename: name, data: txt});
+      ui.expMsg = r && r.status === 'saved' ? 'Saved ' + name + '.' : 'Sent to your downloads. If nothing appeared, use Copy instead.';
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([txt], {type: 'application/json'})); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      ui.expMsg = 'Saved ' + name + '.';
+    }
+  } catch(e){
+    ui.expMsg = 'Saving a file is not available here. Use Copy instead.'; ui.expShow = true;
+  }
+  keepScroll();
+}
 
+/* Strict sanitizer: every field is rebuilt from validated values, nothing is copied as is. */
+const num = (v, lo, hi, def) => { v = typeof v === 'number' ? v : parseFloat(v); return isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def; };
+const str = (v, n) => typeof v === 'string' ? v.replace(/[\u0000-\u001f]/g, ' ').slice(0, n) : '';
+const okId = v => typeof v === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(v);
+const okDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && ds(parseD(v)) === v && v >= '2000-01-01' && v <= addD(todayS(), 1);
+const arr = (v, n) => Array.isArray(v) ? v.slice(0, n) : [];
+const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+function cleanProfile(p){
+  if (!p || typeof p !== 'object') return null;
+  const age = Math.round(num(p.age, 14, 90, NaN)), h = num(p.heightCm, 120, 230, NaN), w = num(p.weightKg, 30, 250, NaN);
+  if (isNaN(age) || isNaN(h) || isNaN(w)) return null;
+  const pick = (v, o, d) => (typeof v === 'string' && has(o, v)) ? v : d;
+  return {name: str(p.name, 24).trim(), age, sex: pick(p.sex, {male:1, female:1, other:1}, 'other'), heightCm: Math.round(h * 10) / 10, weightKg: Math.round(w * 10) / 10,
+    goal: pick(p.goal, GOALS, 'general'), exp: pick(p.exp, EXPS, 'beginner'), days: Math.round(num(p.days, 2, 6, 3)), equip: pick(p.equip, EQUIPS, 'gym'), units: p.units === 'lb' ? 'lb' : 'kg'};
+}
+function cleanPlan(pl, prof){
+  try {
+    const days = arr(pl && pl.days, 7).map(d => {
+      const ex = arr(d && d.ex, 14).filter(e => e && typeof e.id === 'string' && has(LIB, e.id)).map(e => {
+        const lo = Math.round(num(e.lo, 1, 60, 8)), hi = Math.round(num(e.hi, lo, 100, lo + 4));
+        return {id: e.id, s: Math.round(num(e.s, 1, 10, 3)), lo, hi, rest: Math.round(num(e.rest, 0, 600, 90))};
+      });
+      return ex.length ? {name: str(d.name, 30) || 'Day', ex} : null;
+    }).filter(Boolean);
+    if (days.length >= 2 && days.length === prof.days) return {days};
+  } catch(e){}
+  return buildPlan(prof);
+}
+function cleanState(raw){
+  if (!raw || typeof raw !== 'object') throw new Error('bad');
+  const prof = cleanProfile(raw.profile);
+  if (!prof) throw new Error('This backup has no valid profile.');
+  const st = blank(); st.profile = prof; st.plan = cleanPlan(raw.plan, prof);
+  st.next = Math.round(num(raw.next, 0, 50, 0)) % st.plan.days.length;
+  arr(raw.sessions, 3000).forEach(s => {
+    if (!s || !okDate(s.d)) return;
+    const x = arr(s.x, 40).filter(q => Array.isArray(q) && typeof q[0] === 'string' && has(LIB, q[0])).map(q => [q[0], arr(q[1], 40).filter(t => Array.isArray(t)).map(t => [Math.round(num(t[0], 0, 1000, 0) * 100) / 100, Math.round(num(t[1], 0, 1000, 0))]).filter(t => t[1] > 0)]).filter(q => q[1].length);
+    const sec = Math.round(num(s.sec != null ? s.sec : num(s.m, 0, 1000, 0) * 60, 0, 86400, 0));
+    const di = Math.round(num(s.di, 0, st.plan.days.length - 1, 0));
+    st.sessions.push({id: okId(s.id) ? s.id : Date.now().toString(36) + st.sessions.length, d: s.d, n: str(s.n, 40) || st.plan.days[di].name, di, m: Math.round(num(s.m, 0, 1440, Math.round(sec / 60))), sec, ok: s.ok !== false, kc: Math.round(num(s.kc, 0, 5000, Math.round(MET * prof.weightKg * sec / 3600))), t: 0, x, v: Math.round(num(s.v, 0, 1e7, 0)), pr: []});
+  });
+  const seen = {}; st.sessions = st.sessions.filter(s => !seen[s.id] && (seen[s.id] = 1));
+  arr(raw.body, 2000).forEach(b => { if (b && okDate(b.d)) { const kg = num(b.kg, 20, 400, NaN); if (!isNaN(kg)) { const i = st.body.findIndex(z => z.d === b.d); const r = {d: b.d, kg: Math.round(kg * 10) / 10}; if (i >= 0) st.body[i] = r; else st.body.push(r); } } });
+  st.body.sort((a, b) => a.d < b.d ? -1 : 1);
+  const cut = minDay();
+  if (raw.food && typeof raw.food === 'object') Object.keys(raw.food).slice(0, 400).forEach(d => {
+    if (!okDate(d) || d < cut) return;
+    const l = arr(raw.food[d], 80).filter(e => e && typeof e === 'object' && !Array.isArray(e)).map(e => ({n: str(e.n, 60) || 'Food', s: str(e.s, 40), m: str(e.m, 20) || 'Snack', k: Math.round(num(e.k, 0, 20000, 0)), p: Math.round(num(e.p, 0, 2000, 0)), c: Math.round(num(e.c, 0, 3000, 0)), f: Math.round(num(e.f, 0, 2000, 0))}));
+    if (l.length) st.food[d] = l;
+  });
+  if (raw.quick && typeof raw.quick === 'object') Object.keys(raw.quick).slice(0, 400).forEach(d => {
+    if (!okDate(d) || d < cut) return;
+    const l = arr(raw.quick[d], 80).filter(e => e && typeof e.k === 'string' && has(QX, e.k)).map(e => ({k: e.k, n: str(e.n, 30) || QX[e.k][0], a: Math.round(num(e.a, 1, 5000, 1)), kc: Math.round(num(e.kc, 0, 5000, 0))}));
+    if (l.length) st.quick[d] = l;
+  });
+  if (Array.isArray(raw.foods)){
+    const ids = {};
+    st.foods = arr(raw.foods, 500).filter(f => f && typeof f === 'object' && !Array.isArray(f) && str(f.n, 60).trim()).map((f, i) => {
+      let id = okId(f.id) ? f.id : 'i' + i; while (ids[id]) id += 'x'; ids[id] = 1;
+      return {id, n: str(f.n, 60).trim(), s: str(f.s, 40), k: Math.round(num(f.k, 0, 20000, 0)), p: Math.round(num(f.p, 0, 2000, 0)), c: Math.round(num(f.c, 0, 3000, 0)), f: Math.round(num(f.f, 0, 2000, 0))};
+    });
+  }
+  return st;
+}
+function parseImport(txt){
+  txt = String(txt || '').trim();
+  if (!txt) throw new Error('Paste your backup text or choose the backup file first.');
+  if (txt.length > 8e6) throw new Error('That is too large to be a backup.');
+  let o; try { o = JSON.parse(txt); } catch(e){ throw new Error('That does not look like a Rep Ledger backup. Make sure you copied all of it.'); }
+  if (!o || o.app !== EXP_APP || !o.data) throw new Error('That does not look like a Rep Ledger backup.');
+  if (o.v !== 1) throw new Error('This backup is from a newer version of the app.');
+  const st = cleanState(o.data);
+  return st;
+}
+function importSummary(st){
+  const ds_ = st.sessions.map(s => s.d).sort(), nf = Object.keys(st.food).length, nq = Object.keys(st.quick).length;
+  return {workouts: st.sessions.length, from: ds_[0], to: ds_[ds_.length - 1], weighins: st.body.length, foodDays: nf, quickDays: nq, foods: st.foods ? st.foods.length : 0};
+}
+function applyImport(mode){
+  const inc = ui.imp && ui.imp.st; if (!inc) return;
+  if (mode === 'replace' || !S.profile){
+    const keepNext = inc.next;
+    S = inc; S.next = keepNext; S.demo = false;
+  } else {
+    const ids = {}; S.sessions.forEach(s => ids[s.id] = 1);
+    inc.sessions.forEach(s => { if (!ids[s.id]) S.sessions.push(s); });
+    const bd = {}; S.body.forEach(b => bd[b.d] = 1);
+    inc.body.forEach(b => { if (!bd[b.d]) S.body.push(b); });
+    S.body.sort((a, b) => a.d < b.d ? -1 : 1);
+    Object.keys(inc.food).forEach(d => { if (!S.food[d]) S.food[d] = inc.food[d]; });
+    Object.keys(inc.quick).forEach(d => { if (!S.quick[d]) S.quick[d] = inc.quick[d]; });
+    if (inc.foods){ seedFoods(); const names = {}; S.foods.forEach(f => names[f.n.toLowerCase()] = 1); const used = {}; S.foods.forEach(f => used[f.id] = 1);
+      inc.foods.forEach(f => { if (!names[f.n.toLowerCase()]){ let id = f.id; while (used[id]) id += 'm'; used[id] = 1; S.foods.push(Object.assign({}, f, {id})); } }); }
+    if (S.body.length) S.profile.weightKg = S.body[S.body.length - 1].kg;
+    S.demo = false;
+  }
+  rebuildPRs();
+  ui.imp = null; ui.impOpen = false; ui.impText = ''; ui.expShow = false; ui.expMsg = null; ui.day = null; ui.editSess = null; ui.tab = S.profile ? 'today' : 'today';
+  save(); render(); window.scrollTo(0, 0);
+}
+function fmtLongD(s){ return s ? shortD(s) + ' ' + s.slice(0, 4) : ''; }
+function importPanel(first){
+  const im = ui.imp;
+  let h = '<section class="card stack"><h3>Import from the web app</h3>';
+  if (im && im.st){
+    const m = importSummary(im.st);
+    h += '<p>Found <b>' + m.workouts + '</b> workouts' + (m.workouts ? ' (' + fmtLongD(m.from) + ' to ' + fmtLongD(m.to) + ')' : '') + ', <b>' + m.weighins + '</b> weigh-ins, food on <b>' + m.foodDays + '</b> days, quick exercises on <b>' + m.quickDays + '</b> days and <b>' + m.foods + '</b> saved foods.</p>' +
+      (first || !S.profile ? '<button class="btn primary block" data-act="imp-replace">Import this data</button>' :
+      '<button class="btn primary block" data-act="imp-merge">Add to what is here</button><p class="muted" style="font-size:13px;margin-top:-4px">Keeps everything on this device and adds only what is missing. Days that already have entries stay as they are.</p>' +
+      '<button class="btn block" data-act="imp-replace">' + (ui.confirm === 'imp-replace' ? 'Tap again to replace everything here' : 'Replace what is here') + '</button>') +
+      '<button class="btn block ghost" data-act="imp-cancel">Cancel</button>';
+  } else {
+    h += '<p class="muted" style="font-size:14px">In the web app, open Me and tap Copy my data. Paste it here, or choose the backup file if you saved one.</p>' +
+      '<textarea id="imp-text" rows="4" placeholder="Paste your backup text here" style="width:100%;font:inherit;font-size:13px;padding:10px;border-radius:10px;border:1px solid var(--line,#8884);background:var(--card,transparent);color:inherit">' + esc(ui.impText || '') + '</textarea>' +
+      (ui.impErr ? '<p role="alert" style="color:var(--bad,#c0392b);font-size:14px">' + esc(ui.impErr) + '</p>' : '') +
+      '<div class="row wrap"><button class="btn primary" style="flex:1" data-act="imp-check">Check backup</button><label class="btn" style="flex:1;text-align:center;cursor:pointer">Choose file<input id="imp-file" type="file" accept=".json,application/json,text/plain" hidden></label></div>';
+  }
+  return h + '</section>';
+}
+function exportCard(){
+  let h = '<section class="card stack"><h3>Back up or move your data</h3><p class="muted" style="font-size:13px">Use this to move your history to another browser or the installed app, or to keep a copy.</p>' +
+    '<div class="row wrap"><button class="btn primary" style="flex:1" data-act="exp-copy">Copy my data</button><button class="btn" style="flex:1" data-act="exp-file">Save as file</button></div>';
+  if (ui.expMsg) h += '<p role="status" style="font-size:14px">' + esc(ui.expMsg) + '</p>';
+  if (ui.expShow) h += '<textarea id="exp-text" rows="4" readonly style="width:100%;font:inherit;font-size:12px;padding:10px;border-radius:10px;border:1px solid var(--line,#8884);background:var(--card,transparent);color:inherit">' + esc(exportText()) + '</textarea>';
+  return h + '</section>';
+}
+async function readImportFile(f){
+  try {
+    if (!f) return;
+    if (f.size > 8e6) throw new Error('That file is too large to be a backup.');
+    const t = await f.text(); ui.impText = t; runCheck();
+  } catch(e){ ui.impErr = e.message || 'Could not read that file.'; keepScroll(); }
+}
+function runCheck(){
+  try { ui.imp = {st: parseImport(ui.impText)}; ui.impErr = null; }
+  catch(e){ ui.imp = null; ui.impErr = e.message || 'Could not read that backup.'; }
+  keepScroll();
+}
 /* ---------- Render ---------- */
 const TABS = [['today','Today'],['plan','Plan'],['progress','Progress'],['food','Food'],['me','Me']];
 function render(){
@@ -1263,9 +1433,9 @@ function logBody(kg){ setBody(todayS(), kg); }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b || b.tagName === 'SELECT') return;
   const a = b.dataset.act, D = b.dataset;
-  const keep = a !== 'discard' && a !== 'reset' && a !== 'rebuild' && a !== 'delfood' && a !== 'sedel';
+  const keep = a !== 'discard' && a !== 'reset' && a !== 'rebuild' && a !== 'delfood' && a !== 'sedel' && a !== 'imp-replace';
   if (keep && ui.confirm) ui.confirm = null;
-  if (a === 'tab'){ leaveEdit(); ui.day = null; ui.addW = false; ui.editFood = null; ui.tab = D.v; ui.workout = false; ui.editing = false; ui.draft = null; ui.err = null; render(); window.scrollTo(0, 0); }
+  if (a === 'tab'){ leaveEdit(); ui.day = null; ui.addW = false; ui.editFood = null; ui.tab = D.v; ui.imp = null; ui.impOpen = false; ui.impErr = null; ui.expMsg = null; ui.expShow = false; ui.workout = false; ui.editing = false; ui.draft = null; ui.err = null; render(); window.scrollTo(0, 0); }
   else if (a === 'seg'){
     const d = ui.draft;
     if (D.k === 'units' && d.units !== D.v){
@@ -1397,10 +1567,21 @@ document.addEventListener('click', e => {
   else if (a === 'cancelfe'){ ui.editFood = null; keepScroll(); }
   else if (a === 'savefe'){ if (saveFoodEntry()){ ui.editFood = null; save(); keepScroll(); } }
   else if (a === 'install'){ if (deferredInstall){ const ev = deferredInstall; ev.prompt(); Promise.resolve(ev.userChoice).then(() => { deferredInstall = null; render(); }, () => {}); } }
+  else if (a === 'exp-copy') copyExport();
+  else if (a === 'exp-file') saveExportFile();
+  else if (a === 'imp-open'){ ui.impOpen = true; ui.imp = null; ui.impErr = null; render(); }
+  else if (a === 'imp-check'){ const t = document.getElementById('imp-text'); if (t) ui.impText = t.value; runCheck(); }
+  else if (a === 'imp-cancel'){ ui.imp = null; ui.impOpen = false; ui.impErr = null; ui.impText = ''; render(); }
+  else if (a === 'imp-merge') applyImport('merge');
+  else if (a === 'imp-replace'){
+    if (S.profile && S.sessions.length + Object.keys(S.food).length > 0 && ui.confirm !== 'imp-replace'){ ui.confirm = 'imp-replace'; keepScroll(); return; }
+    ui.confirm = null; applyImport('replace');
+  }
   else if (a === 'closesummary'){ ui.summary = null; render(); }
 });
 document.addEventListener('input', e => {
   const t = e.target;
+  if (t.id === 'imp-text'){ ui.impText = t.value; return; }
   if (t.id === 'fq'){ ui.foodQ = t.value; const q = t.value.trim().toLowerCase(); document.querySelectorAll('.fopt').forEach(r => { r.hidden = !!q && r.dataset.name.indexOf(q) < 0; }); return; }
   if (t.dataset.se !== undefined){
     const s = curSess(), x = s && s.x[+t.dataset.xi], st = x && x[1][+t.dataset.si], v = parseFloat(String(t.value).replace(',', '.'));
@@ -1417,7 +1598,8 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.id === 'exsel'){ ui.chartEx = t.value; keepScroll(); }
+  if (t.id === 'imp-file'){ readImportFile(t.files && t.files[0]); t.value = ''; }
+  else if (t.id === 'exsel'){ ui.chartEx = t.value; keepScroll(); }
   else if (t.id === 'daypick' || t.id === 'logpick'){ if (validDay(t.value)){ leaveEdit(); ui.day = t.value; ui.addW = false; ui.editFood = null; render(); window.scrollTo(0, 0); } }
   else if (t.id === 'se-d'){ const s = curSess(); if (s && validDay(t.value)){ s.d = t.value; ui.day = t.value; refreshSession(s); } }
   else if (t.id === 'se-di'){ const s = curSess(), i = +t.value; if (s && i >= 0 && S.plan.days[i]){ s.di = i; s.n = S.plan.days[i].name; save(); } }
@@ -1437,7 +1619,6 @@ document.addEventListener('keydown', e => {
   render();
   connectDb();
 })();
-
 
 </script>
 <script>
