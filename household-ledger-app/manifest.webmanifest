@@ -1,0 +1,16 @@
+{
+  "name": "Household Ledger",
+  "short_name": "Ledger",
+  "description": "Track household spending against budgets, import M-Pesa messages and see where the money goes.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#E9F3F1",
+  "theme_color": "#0BB07B",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
